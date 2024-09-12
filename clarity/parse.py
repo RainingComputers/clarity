@@ -36,7 +36,8 @@ def expand_tags(tags: list[str]) -> list[str]:
     expanded = deepcopy(tags)
 
     for tag in tags:
-        expanded.append(tag.split("/")[0])
+        if "/" in tag:
+            expanded.append(tag.split("/")[0])
 
     return expanded
 
