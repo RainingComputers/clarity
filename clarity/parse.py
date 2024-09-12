@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -31,6 +32,15 @@ def parse_timestamp(timestamp_str: str, now: datetime) -> datetime:
     )
 
 
+def expand_tags(tags: list[str]) -> list[str]:
+    expanded = deepcopy(tags)
+
+    for tag in tags:
+        expanded.append(tag.split("/")[0])
+
+    return expanded
+
+
 def parse_span(line: str, now: datetime) -> ParsedTimeSpan:
     tokens = line.split(" ")
 
@@ -45,6 +55,8 @@ def parse_span(line: str, now: datetime) -> ParsedTimeSpan:
         tags = tokens[first_tag:]
     except (IndexError, ValueError) as err:
         raise ParseError() from err
+
+    tags = expand_tags(tags)
 
     return ParsedTimeSpan(start=start, to=to, name=name, tags=tags)
 
