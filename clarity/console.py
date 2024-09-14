@@ -17,6 +17,7 @@ from clarity.parse import (
 from clarity.visualize import plot_time_spent_map
 
 time_spent_map: dict[str, int] = {}
+time_spent_map_yesterday: dict[str, int] = {}
 schedule: list[ParsedTimeSpan] = []
 selected_date = str(datetime.date.today())
 
@@ -35,16 +36,21 @@ def date_selector(name: str, init_date: str) -> Input:
     return date_input
 
 
-@ui.refreshable
-def plot(time_spent_map: dict[str, int]) -> None:
-    plot = ui.matplotlib()
+def plot(title: str) -> Any:
+    @ui.refreshable
+    def plot_refreshable(time_spent_map: dict[str, int]) -> None:
+        plot = ui.matplotlib().classes("py-2")
 
-    with plot.figure as fig:
-        plot_time_spent_map(time_spent_map, fig)
+        with plot.figure as fig:
+            fig.set_figwidth(16)
+            fig.set_figheight(6)
+            plot_time_spent_map(time_spent_map, fig, title)
 
-    plot._props["innerHTML"] = plot._props["innerHTML"].replace(
-        "<svg", '<svg style="width:100%;height:100%"'
-    )
+        plot._props["innerHTML"] = plot._props["innerHTML"].replace(
+            "<svg", '<svg style="width:100%;height:100%"'
+        )
+
+    return plot_refreshable
 
 
 def status_bar() -> tuple[Label, Input, Label, Label, Label]:
@@ -65,22 +71,18 @@ ui.add_css("""
 """)
 
 
-with ui.row().classes("flex-nowrap gap-0 p-0"):
-    with ui.tabs().props("vertical").classes("w-22") as tabs:
-        planner = ui.tab("Planner", icon="schedule")
-        calendar = ui.tab("Calender", icon="calendar_month")
-        settings = ui.tab("Settings", icon="settings")
-    with ui.tab_panels(tabs, value=planner):
-        with ui.tab_panel(planner).classes("p-0 h-screen"):
-            with ui.column().classes("w-full h-screen"):
-                with ui.row().classes("items-center flex w-full"):
-                    date_label, date_input, task_label, task_dot, time_label = (
-                        status_bar()
-                    )
+with ui.column().classes("w-screen h-screen"):
+    with ui.row().classes("items-center flex w-full"):
+        date_label, date_input, task_label, task_dot, time_label = status_bar()
 
-                with ui.grid(columns=2).classes("gap-0 w-full h-screen"):
-                    editor = ui.codemirror("").classes("h-full text-xl p-0")
-                    plot(time_spent_map)
+    with ui.grid(columns=2).classes("gap-0 w-full h-screen"):
+        editor = ui.codemirror("").classes("h-full text-xl p-0")
+
+        with ui.grid(columns=1).classes():
+            plot_today = plot("Today")
+            plot_today(time_spent_map)
+            plot_yesterday = plot("Yesterday")
+            plot_yesterday(time_spent_map_yesterday)
 
 
 def on_tick() -> None:
@@ -100,6 +102,21 @@ def on_tick() -> None:
         disable_task_status()
 
 
+def get_time_spent_map(date: str, days_delta: int) -> dict[str, int]:
+    date_delta = str(
+        datetime.date.fromisoformat(date) - datetime.timedelta(days=days_delta)
+    )
+
+    plan_note = read_plan_note(date_delta)
+
+    schedule = parse_schedule(
+        plan_note,
+        datetime.datetime.fromisoformat(date_delta),
+    )
+
+    return construct_time_spent_map(schedule)
+
+
 def on_editor(_: Any) -> None:
     global time_spent_map
     global schedule
@@ -112,17 +129,21 @@ def on_editor(_: Any) -> None:
         )
         time_spent_map = construct_time_spent_map(schedule)
 
-        plot.refresh(time_spent_map)
+        plot_today.refresh(time_spent_map)
     except ParseError:
         pass
 
 
 def on_select_date(value: str) -> None:
     global selected_date
+    global time_spent_map_yesterday
 
     selected_date = value
 
     plan_note = read_plan_note(selected_date)
+
+    time_spent_map_yesterday = get_time_spent_map(selected_date, 1)
+    plot_yesterday.refresh(time_spent_map_yesterday)
 
     editor.set_value(plan_note)
     date_label.set_text(format_date(value))
